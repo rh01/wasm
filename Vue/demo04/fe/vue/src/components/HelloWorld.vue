@@ -12,6 +12,7 @@
     <button @click="sub();" id="subButton">Sub</button>
     <button @click="mul();" id="subButton">Mult</button>
     <button @click="div();" id="subButton">Div</button>
+    <button @click="log();" id="subButton">Log</button>
   </div>
 </template>
 
@@ -34,6 +35,14 @@ export default {
   created() { },
   mounted() { },
   methods: {
+    log() {
+      let values = [this.value1, this.value2]
+
+      // // eslint-disable-next-line
+      // this.calcResult = waAdd(...values)
+      this.$go.log(...values)
+      // this.operator = "+"
+    },
     add() {
       let values = [this.value1, this.value2]
 
