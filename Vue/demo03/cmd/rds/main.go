@@ -14,7 +14,7 @@ import (
 type DBInstanceConfig struct {
 	ZoneID          string                 `json:"zoneID"`
 	NetworkTypes    string                 `json:"networkTypes"`
-	regionID        string                 `json:"regionID"`
+	RegionID        string                 `json:"regionID"`
 	ZoneStatue      string                 `json:"zoneStatue"`
 	Engine          string                 `json:"engine"`
 	EngineVersion   string                 `json:"engineVersion"`
@@ -41,8 +41,18 @@ func getMSession(conn string) (*mgo.Session, error) {
 	return mgo.Dial(conn)
 }
 
-func main() {
+func sync() {
+	// set up mongodb client
+	sess, err := getMSession("mongodb://localhost/matrix")
+	if err != nil {
+		panic(err)
+	}
+	defer sess.Close()
 
+	// Optional. Switch the session to a monotonic behavior.
+	sess.SetMode(mgo.Monotonic, true)
+
+	// set up an aliyun rds client
 	client, err := rds.NewClientWithAccessKey("cn-beijing", os.Getenv("AK"), os.Getenv("SK"))
 
 	request := rds.CreateDescribeAvailableResourceRequest()
@@ -56,16 +66,8 @@ func main() {
 		fmt.Print(err.Error())
 	}
 
-	sess, err := getMSession("mongodb://10.0.1.206/alicloud")
-	if err != nil {
-		panic(err)
-	}
-	defer sess.Close()
-	// Optional. Switch the session to a monotonic behavior.
-	sess.SetMode(mgo.Monotonic, true)
-
 	// get c
-	c := sess.DB("alicloud").C("rds")
+	c := sess.DB("matrix").C("rds")
 
 	for _, zone := range response.AvailableZones.AvailableZone {
 		zoneID := zone.ZoneId
@@ -97,7 +99,7 @@ func main() {
 							config := &DBInstanceConfig{
 								ZoneID:          zoneID,
 								NetworkTypes:    networktype,
-								regionID:        regionID,
+								RegionID:        regionID,
 								ZoneStatue:      zoneStatue,
 								Engine:          engineName,
 								EngineVersion:   supportEngineVersion,
@@ -117,6 +119,9 @@ func main() {
 			}
 		}
 	}
-
 	// fmt.Printf("response is %#v\n", response)
+}
+
+func main() {
+	sync()
 }

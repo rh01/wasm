@@ -10,7 +10,7 @@ WebAssembly.instantiateStreaming(fetch("calc.wasm"), go.importObject)
   // await go.run(result.instance)
   .then((result) => {
     go.run(result.instance)
-    console.log(waAdd(...Array("2", "1")))
+  //   console.log(waAdd(...Array("2", "1")))
     // log().then((result) => console.log(result))
 
     Vue.prototype.$go = {
@@ -18,7 +18,11 @@ WebAssembly.instantiateStreaming(fetch("calc.wasm"), go.importObject)
       sub: waSub,
       multi: waMulti,
       divi: waDivi,
-      log: log,
+      // log: log,
+      log: myGoFunc,
+      asyncOne: asyncOne,
+      fetchHttp: fetchHttp,
+      fetchMongoDocument: fetchMongoDocument
     }
   })
 
