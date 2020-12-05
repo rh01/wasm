@@ -2,7 +2,12 @@ import Go from './wasm_exec'
 
 import Vue from 'vue'
 import App from './App.vue'
+import apiConfig from './api.config'
+import Axios from 'axios'
+import VueAxios from 'vue-axios'
 
+Vue.use(VueAxios, Axios)
+Axios.defaults.baseURL = apiConfig.baseURL
 /* eslint no-undef: "off"*/
 const go = new Go()
 WebAssembly.instantiateStreaming(fetch("calc.wasm"), go.importObject)

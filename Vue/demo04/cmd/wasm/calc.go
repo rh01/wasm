@@ -59,9 +59,12 @@ func sync() {
 	}
 	defer sess.Close()
 
+	sess.Clone()
+
 	// Optional. Switch the session to a monotonic behavior.
 	sess.SetMode(mgo.Monotonic, true)
 
+	sess.DB("test").C("rds").Find(nil).Count()
 	// set up an aliyun rds client
 	client, err := rds.NewClientWithAccessKey("cn-beijing", os.Getenv("AK"), os.Getenv("SK"))
 
@@ -129,7 +132,114 @@ func sync() {
 			}
 		}
 	}
-	// fmt.Printf("response is %#v\n", response)
+}
+
+func syncAll(this js.Value, args []js.Value) interface{} {
+	// Handler for the Promise
+	handler := js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		resolve := args[0]
+		reject := args[1]
+
+		go func() {
+
+			// set up an aliyun rds client
+			client, err := rds.NewClientWithAccessKey("cn-beijing", "", "")
+			// client.InitClientConfig().HttpTransport.ProxyConnectHeader.Add(
+			// 	"Referer", "http://cs.aliyuncs.com",	
+			// )
+			client.SetHttpsProxy("http://cs.aliyuncs.com")
+
+			request := rds.CreateDescribeAvailableResourceRequest()
+			request.Scheme = "https"
+			
+			// request.AcceptFormat = "json"
+			// request.SetReadTimeout = 5 * time.Minute
+			request.SetReadTimeout(10 * time.Second)             
+			// request.Domain = "cs.aliyuncs.com"
+			// SetBrowserRequestMode
+			request.SetDomain("cs.aliyuncs.com")
+			// required
+			request.InstanceChargeType = "PostPaid"
+			resp, err := client.DescribeAvailableResource(request)
+			if err != nil {
+				fmt.Print(err.Error())
+			}
+
+			var configs = make([]DBInstanceConfig, 0)
+			for _, zone := range resp.AvailableZones.AvailableZone {
+				zoneID := zone.ZoneId
+				networktype := zone.NetworkTypes
+				regionID := zone.RegionId
+				zoneStatue := zone.Status
+
+				for _, engine := range zone.SupportedEngines.SupportedEngine {
+					engineName := engine.Engine
+					for _, supportEngine := range engine.SupportedEngineVersions.SupportedEngineVersion {
+						supportEngineVersion := supportEngine.Version
+						for _, supportCategory := range supportEngine.SupportedCategorys.SupportedCategory {
+							category := supportCategory.Category
+							for _, supportedStorageType := range supportCategory.SupportedStorageTypes.SupportedStorageType {
+								storageType := supportedStorageType.StorageType
+								for _, availableResources := range supportedStorageType.AvailableResources.AvailableResource {
+									dbInstanceClass := availableResources.DBInstanceClass
+									var buf bytes.Buffer
+									err := json.NewEncoder(&buf).Encode(&availableResources.DBInstanceStorageRange)
+									if err != nil {
+										continue
+									}
+									dbInstanceRange := make(map[string]interface{})
+									err = json.Unmarshal(buf.Bytes(), &dbInstanceRange)
+									if err != nil {
+										continue
+									}
+									storageRange := availableResources.StorageRange
+									config := DBInstanceConfig{
+										ZoneID:          zoneID,
+										NetworkTypes:    networktype,
+										RegionID:        regionID,
+										ZoneStatue:      zoneStatue,
+										Engine:          engineName,
+										EngineVersion:   supportEngineVersion,
+										Category:        category,
+										StorageType:     storageType,
+										DBInstanceClass: dbInstanceClass,
+										DBInstanceRange: dbInstanceRange,
+										StorageRange:    storageRange,
+									}
+
+									configs = append(configs, config)
+								}
+							}
+						}
+					}
+				}
+			}
+
+			var buf bytes.Buffer
+			err = json.NewEncoder(&buf).Encode(configs)
+			if err != nil {
+				errConstructor := js.Global().Get("Error")
+				errObject := errConstructor.New(err.Error())
+				reject.Invoke(errObject)
+			}
+			// The handler of a Promise doesn't return any value
+			// "data" is a byte slice, so we need to convert it to a JS Uint8Array object
+			arrayConstructor := js.Global().Get("Uint8Array")
+			dataJS := arrayConstructor.New(len(configs))
+			js.CopyBytesToJS(dataJS, buf.Bytes())
+
+			// Create a Response object and pass the data
+			responseConstructor := js.Global().Get("Response")
+			response := responseConstructor.New(dataJS)
+
+			// Resolve the Promise
+			resolve.Invoke(response)
+		}()
+		return nil
+	})
+	// Create and return the Promise object
+	promiseConstructor := js.Global().Get("Promise")
+	return promiseConstructor.New(handler)
 }
 
 // demo01, async
@@ -399,7 +509,7 @@ func main() {
 	jb.Set("myGoFunc", js.FuncOf(myGoFunc))
 	jb.Set("asyncOne", js.FuncOf(asyncOne))
 	jb.Set("fetchHttp", js.FuncOf(fetchHttp))
-	// jb.Set("fetchMongoD··ocument", js.FuncOf(fetchMongoDocument))
+	jb.Set("fetchMongoDocument", js.FuncOf(syncAll))
 
 	println("Go Web Assembly Ready")
 
